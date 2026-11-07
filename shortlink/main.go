@@ -46,8 +46,31 @@ func main() {
 
 	//注册路由
 	r := gin.Default()
+	//下方代码由ai创建前端时产生
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	r.GET("/", func(c *gin.Context) {
+		c.File("log.html")
+	})
+	r.GET("/log.html", func(c *gin.Context) {
+		c.File("log.html")
+	})
+	r.GET("/links.html", func(c *gin.Context) {
+		c.File("links.html")
+	})
+	r.GET("/public-links.html", func(c *gin.Context) {
+		c.File("public-links.html")
 	})
 
 	//创建用户&登录&创建短链
@@ -61,6 +84,7 @@ func main() {
 	r.POST("/login", userHandler.Login)
 
 	r.GET("/s/:code", linkHandler.Redirect)
+	r.GET("/public/links", linkHandler.PublicList)
 
 	//将需要登录后才能访问的接口放在一个分组中
 	group := r.Group("/")

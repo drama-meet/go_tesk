@@ -24,9 +24,15 @@ type UPlength struct {
 	Password string `json:"password" binding:"required,max=255"`
 }
 
+type RegisterB struct {
+	Username string `json:"username" binding:"required,max=32"`
+	Password string `json:"password" binding:"required,max=255"`
+	REmail   string `json:"email" binding:"required,max=255"`
+}
+
 // 创建用户
 func (h UserHandler) UserRH(c *gin.Context) {
-	var req UPlength
+	var req RegisterB
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名最多32位，密码最多255位"})
 		return
@@ -43,6 +49,17 @@ func (h UserHandler) UserRH(c *gin.Context) {
 		return
 	}
 
+	//确保邮箱没注册过
+	twiceexits, err := h.user.EmailExits(req.REmail)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误(1)"})
+		return
+	}
+	if twiceexits {
+		c.JSON(http.StatusConflict, gin.H{"error": "该邮箱已有账号存在"})
+		return
+	}
+
 	//密码加密
 	hash, err := pkg.HashPassword(req.Password)
 	if err != nil {
@@ -54,6 +71,7 @@ func (h UserHandler) UserRH(c *gin.Context) {
 	u := &model.User{
 		Name:     req.Username,
 		Password: hash,
+		Email:    req.REmail,
 	}
 	if err := h.user.CreateNewUser(u); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误(3)"})

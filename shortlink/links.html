@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>短链管理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --surface: #fff;
+      --text: #202633;
+      --muted: #737d8c;
+      --line: #e6eaf0;
+      --primary: #3267e9;
+      --danger: #cf3e4b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    button, input, textarea, select { font: inherit; }
+    .page { width: min(960px, calc(100% - 32px)); margin: 48px auto; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    h1 { margin: 0; font-size: 25px; }
+    .subtitle { margin: 4px 0 0; color: var(--muted); }
+    .card {
+      margin-bottom: 20px;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .create-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+    .create-form input, .create-form textarea, .create-form select {
+      min-width: 0;
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .create-form textarea { min-height: 74px; resize: vertical; grid-column: 1 / -1; }
+    .create-form .visibility { display: flex; align-items: center; gap: 10px; }
+    .create-form .visibility label { color: var(--muted); font-size: 14px; white-space: nowrap; }
+    .create-form .visibility select { width: auto; min-width: 150px; }
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { cursor: wait; opacity: .65; }
+    .secondary { background: #edf1f7; color: var(--text); }
+    nav { display: flex; align-items: center; gap: 10px; }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background .15s, border-color .15s;
+    }
+    .nav-link:hover { background: #eef3ff; border-color: #cbd8ff; }
+    .delete { padding: 7px 11px; background: #fff0f1; color: var(--danger); }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    h2 { margin: 0; font-size: 18px; }
+    #status { min-height: 22px; margin: 12px 0 0; color: #21804a; }
+    #status.error { color: var(--danger); }
+    .link-list { display: grid; gap: 12px; }
+    .link-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .short-url { color: var(--primary); font-weight: 600; overflow-wrap: anywhere; }
+    .long-url { margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
+    .meta { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .empty { padding: 28px 12px; color: var(--muted); text-align: center; }
+    @media (max-width: 560px) {
+      .page { margin: 24px auto; }
+      .card { padding: 18px; }
+      .create-form { grid-template-columns: 1fr; }
+      .create-form textarea { grid-column: auto; }
+      .create-form .visibility { justify-content: space-between; }
+      .link-item { grid-template-columns: minmax(0, 1fr); }
+      .delete { justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <h1>短链管理</h1>
+        <p class="subtitle">创建、查看和管理你的短链接</p>
+      </div>
+      <nav aria-label="页面操作">
+        <a class="nav-link" href="public-links.html"><span aria-hidden="true">⌕</span>发现短链</a>
+        <button id="logout" type="button" class="secondary">退出登录</button>
+      </nav>
+    </header>
+
+    <section class="card">
+      <h2>生成短链</h2>
+      <form id="create-form" class="create-form" style="margin-top: 16px">
+        <input id="long-url" type="url" placeholder="输入完整网址，例如 https://example.com" required>
+        <textarea id="link-comment" maxlength="500" placeholder="添加备注（最多 500 字，可留空）" aria-label="短链备注"></textarea>
+        <div class="visibility">
+          <label for="comment-visibility">备注可见范围</label>
+          <select id="comment-visibility">
+            <option value="private">仅自己可见</option>
+            <option value="public">公开显示</option>
+          </select>
+        </div>
+        <button type="submit">生成短链</button>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <h2>我的短链</h2>
+        <button id="refresh" type="button" class="secondary">刷新</button>
+      </div>
+      <div id="link-list" class="link-list"></div>
+    </section>
+  </main>
+
+  <script>
+    const API = window.location.port === '11114' ? window.location.origin : 'http://localhost:11114';
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const listElement = document.getElementById('link-list');
+    const statusElement = document.getElementById('status');
+
+    if (!token) {
+      window.location.replace('log.html');
+    } else {
+      loadLinks();
+    }
+
+    function setStatus(message, isError) {
+      statusElement.textContent = message;
+      statusElement.classList.toggle('error', Boolean(isError));
+    }
+
+    async function request(path, options) {
+      let response;
+      try {
+        response = await fetch(`${API}${path}`, {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(options && options.headers ? options.headers : {})
+          }
+        });
+      } catch (error) {
+        throw new Error('无法连接后端，请确认服务已启动（端口 11114）');
+      }
+
+      const text = await response.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          throw new Error('后端返回的数据格式不正确');
+        }
+      }
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        window.location.replace('log.html');
+        throw new Error('登录已过期，请重新登录');
+      }
+      if (!response.ok) {
+        throw new Error(data.error || `请求失败（${response.status}）`);
+      }
+      return data;
+    }
+
+    async function loadLinks() {
+      listElement.replaceChildren();
+      const loading = document.createElement('p');
+      loading.className = 'empty';
+      loading.textContent = '正在加载...';
+      listElement.append(loading);
+
+      try {
+        const data = await request('/links');
+        const items = Array.isArray(data.items) ? data.items : [];
+        listElement.replaceChildren();
+        if (items.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'empty';
+          empty.textContent = '还没有短链，输入网址创建一条吧。';
+          listElement.append(empty);
+          return;
+        }
+
+        items.forEach(function (item) {
+          const row = document.createElement('article');
+          row.className = 'link-item';
+
+          const details = document.createElement('div');
+          const shortUrl = document.createElement('a');
+          shortUrl.className = 'short-url';
+          shortUrl.href = `${API}/s/${encodeURIComponent(item.code)}`;
+          shortUrl.target = '_blank';
+          shortUrl.rel = 'noopener noreferrer';
+          shortUrl.textContent = shortUrl.href;
+
+          const longUrl = document.createElement('div');
+          longUrl.className = 'long-url';
+          longUrl.textContent = item.long_url || '';
+
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          const created = item.created_at ? new Date(item.created_at).toLocaleString() : '时间未知';
+          meta.textContent = `点击 ${Number(item.clicks) || 0} 次 · 创建于 ${created} · 备注${item.comment_public ? '公开' : '仅自己可见'}`;
+
+          details.append(shortUrl, longUrl);
+          if (item.comment) {
+            const comment = document.createElement('div');
+            comment.className = 'meta';
+            comment.textContent = `备注：${item.comment}`;
+            details.append(comment);
+          }
+          details.append(meta);
+
+          const deleteButton = document.createElement('button');
+          deleteButton.type = 'button';
+          deleteButton.className = 'delete';
+          deleteButton.textContent = '删除';
+          deleteButton.addEventListener('click', function () {
+            deleteLink(item.id, deleteButton);
+          });
+
+          row.append(details, deleteButton);
+          listElement.append(row);
+        });
+      } catch (error) {
+        listElement.replaceChildren();
+        setStatus(error.message || '读取短链失败', true);
+      }
+    }
+
+    async function deleteLink(id, button) {
+      if (!window.confirm('确定删除这条短链吗？删除后无法恢复。')) return;
+      button.disabled = true;
+      try {
+        await request(`/links/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        setStatus('短链已删除');
+        const row = button.closest('.link-item');
+        if (row) row.remove();
+        if (!listElement.querySelector('.link-item')) {
+          const empty = document.createElement('p');
+          empty.className = 'empty';
+          empty.textContent = '还没有短链，输入网址创建一条吧。';
+          listElement.replaceChildren(empty);
+        }
+      } catch (error) {
+        if (error.message.includes('短链不存在') || error.message.includes('(404)')) {
+          const row = button.closest('.link-item');
+          if (row) row.remove();
+          setStatus('这条短链已不存在，已从列表移除。');
+          if (!listElement.querySelector('.link-item')) {
+            const empty = document.createElement('p');
+            empty.className = 'empty';
+            empty.textContent = '还没有短链，输入网址创建一条吧。';
+            listElement.replaceChildren(empty);
+          }
+        } else {
+          setStatus(error.message || '删除失败', true);
+          button.disabled = false;
+        }
+      }
+    }
+
+    document.getElementById('create-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const input = document.getElementById('long-url');
+      const commentInput = document.getElementById('link-comment');
+      const commentVisibility = document.getElementById('comment-visibility');
+      const button = this.querySelector('button[type="submit"]');
+      const longUrl = input.value.trim();
+      if (!longUrl) {
+        setStatus('请输入网址', true);
+        return;
+      }
+
+      button.disabled = true;
+      setStatus('');
+      try {
+        const data = await request('/shorten', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: longUrl,
+            comment: commentInput.value.trim(),
+            comment_public: commentVisibility.value === 'public'
+          })
+        });
+        input.value = '';
+        commentInput.value = '';
+        commentVisibility.value = 'private';
+        setStatus(`生成成功：${data.short_url || data.code}`);
+        await loadLinks();
+      } catch (error) {
+        setStatus(error.message || '生成短链失败', true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.getElementById('refresh').addEventListener('click', loadLinks);
+    document.getElementById('logout').addEventListener('click', function () {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      window.location.replace('log.html');
+    });
+  </script>
+</body>
+</html>

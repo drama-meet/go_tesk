@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公开短链</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --surface: #fff;
+      --text: #202633;
+      --muted: #737d8c;
+      --line: #e6eaf0;
+      --primary: #3267e9;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    button, input { font: inherit; }
+    a { color: var(--primary); }
+    .page { width: min(960px, calc(100% - 32px)); margin: 42px auto; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    h1 { margin: 0; font-size: 25px; }
+    h2 { margin: 0; font-size: 18px; }
+    .subtitle { margin: 4px 0 0; color: var(--muted); }
+    .card {
+      margin-bottom: 20px;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .search-form { display: flex; gap: 10px; margin-top: 16px; }
+    input {
+      min-width: 0;
+      flex: 1;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { cursor: wait; opacity: .65; }
+    .secondary { background: #edf1f7; color: var(--text); text-decoration: none; }
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .nav-link:hover { background: #eef3ff; border-color: #cbd8ff; }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .items { display: grid; gap: 10px; }
+    .item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .short-url { font-weight: 600; overflow-wrap: anywhere; }
+    .long-url { margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
+    .meta { margin-top: 7px; color: var(--muted); font-size: 13px; }
+    .click-count { color: var(--muted); white-space: nowrap; font-size: 13px; }
+    .message { padding: 20px 10px; color: var(--muted); text-align: center; }
+    .error { color: #c53540; }
+    @media (max-width: 560px) {
+      .page { margin: 24px auto; }
+      .card { padding: 18px; }
+      .search-form { flex-direction: column; }
+      .item { grid-template-columns: minmax(0, 1fr); }
+      .click-count { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <h1>公开短链</h1>
+        <p class="subtitle">搜索大家创建的短链，或查看点击热度榜</p>
+      </div>
+      <a class="nav-link" id="account-link" href="log.html">登录 / 注册</a>
+    </header>
+
+    <section class="card">
+      <h2>搜索短链</h2>
+      <form id="search-form" class="search-form">
+        <input id="query" type="search" placeholder="搜索短码、原网址或用户名" aria-label="搜索短链">
+        <button type="submit">搜索</button>
+      </form>
+      <div id="search-results" class="items" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <h2>热度榜</h2>
+        <button id="refresh-popular" type="button" class="secondary">刷新</button>
+      </div>
+      <div id="popular-results" class="items" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    const API = window.location.port === '11114' ? window.location.origin : 'http://localhost:11114';
+    const accountLink = document.getElementById('account-link');
+    if (localStorage.getItem('token') || sessionStorage.getItem('token')) {
+      accountLink.href = 'links.html';
+      accountLink.textContent = '返回短链管理';
+    }
+
+    async function fetchLinks(query, sort) {
+      const params = new URLSearchParams({ sort: sort });
+      if (query) params.set('q', query);
+      let response;
+      try {
+        response = await fetch(`${API}/public/links?${params.toString()}`);
+      } catch (error) {
+        throw new Error('无法连接后端，请确认服务已启动（端口 11114）');
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (error) {
+        throw new Error('后端返回的数据格式不正确');
+      }
+      if (!response.ok) throw new Error(data.error || `请求失败（${response.status}）`);
+      return Array.isArray(data.items) ? data.items : [];
+    }
+
+    function renderMessage(container, message, isError) {
+      container.replaceChildren();
+      const element = document.createElement('p');
+      element.className = isError ? 'message error' : 'message';
+      element.textContent = message;
+      container.append(element);
+    }
+
+    function renderLinks(container, items, emptyMessage) {
+      container.replaceChildren();
+      if (items.length === 0) {
+        renderMessage(container, emptyMessage, false);
+        return;
+      }
+
+      items.forEach(function (item, index) {
+        const row = document.createElement('article');
+        row.className = 'item';
+        const details = document.createElement('div');
+
+        const shortLink = document.createElement('a');
+        shortLink.className = 'short-url';
+        shortLink.href = `${API}/s/${encodeURIComponent(item.code)}`;
+        shortLink.target = '_blank';
+        shortLink.rel = 'noopener noreferrer';
+        shortLink.textContent = shortLink.href;
+
+        const longUrl = document.createElement('div');
+        longUrl.className = 'long-url';
+        longUrl.textContent = item.long_url || '';
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `创建者：${item.username || '未知用户'}`;
+        details.append(shortLink, longUrl, meta);
+        if (item.comment) {
+          const comment = document.createElement('div');
+          comment.className = 'meta';
+          comment.textContent = `备注：${item.comment}`;
+          details.append(comment);
+        }
+
+        const count = document.createElement('div');
+        count.className = 'click-count';
+        count.textContent = `${sortForContainer(container) === 'popular' ? `第 ${index + 1} 名 · ` : ''}${Number(item.clicks) || 0} 次点击`;
+        row.append(details, count);
+        container.append(row);
+      });
+    }
+
+    function sortForContainer(container) {
+      return container.id === 'popular-results' ? 'popular' : 'recent';
+    }
+
+    async function loadPopular() {
+      const container = document.getElementById('popular-results');
+      renderMessage(container, '正在加载热度榜...', false);
+      try {
+        const items = await fetchLinks('', 'popular');
+        renderLinks(container, items, '暂时还没有短链数据。');
+      } catch (error) {
+        renderMessage(container, error.message || '加载热度榜失败', true);
+      }
+    }
+
+    document.getElementById('search-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const container = document.getElementById('search-results');
+      const query = document.getElementById('query').value.trim();
+      if (!query) {
+        renderMessage(container, '请输入短码、网址或用户名进行搜索。', true);
+        return;
+      }
+      renderMessage(container, '正在搜索...', false);
+      try {
+        const items = await fetchLinks(query, 'recent');
+        renderLinks(container, items, '没有找到匹配的短链。');
+      } catch (error) {
+        renderMessage(container, error.message || '搜索失败', true);
+      }
+    });
+
+    document.getElementById('refresh-popular').addEventListener('click', loadPopular);
+    loadPopular();
+  </script>
+</body>
+</html>

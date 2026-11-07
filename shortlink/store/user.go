@@ -38,3 +38,13 @@ func (s *UserStore) Exits(username string) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+// 判断用户邮箱是否已经注册
+func (s *UserStore) EmailExits(email string) (bool, error) {
+	var count int64 //gorm.Count()只支持int64
+	err := s.db.Model(&model.User{}).Where("email=?", email).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

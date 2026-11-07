@@ -26,13 +26,15 @@ func NewLinkHandler(links *store.LinkStore, quota *service.QuotaService) *LinkHa
 }
 
 type creasteReq struct {
-	URL string `json:"url" binding:"required"`
+	URL           string `json:"url" binding:"required"`
+	Comment       string `json:"comment" binding:"max=500"`
+	CommentPublic bool   `json:"comment_public"`
 }
 
 func (h *LinkHandler) Create(c *gin.Context) {
 	var req creasteReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供url"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供url，注释不能超过500字"})
 		return
 	}
 
@@ -69,9 +71,11 @@ func (h *LinkHandler) Create(c *gin.Context) {
 
 	//入库
 	l := &model.Link{
-		UserID:  uid,
-		Code:    code,
-		LongUrl: req.URL,
+		UserID:        uid,
+		Code:          code,
+		LongUrl:       req.URL,
+		Comment:       req.Comment,
+		CommentPublic: req.CommentPublic,
 	}
 	if err := h.links.Create(l); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
@@ -137,6 +141,20 @@ func (h *LinkHandler) List(c *gin.Context) {
 		return
 	}
 	links, err := h.links.ListByUser(uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": links, "total": len(links)})
+}
+
+// 搜索和热门短链的接口
+func (h *LinkHandler) PublicList(c *gin.Context) {
+	limit := 100
+	if c.Query("sort") == "popular" {
+		limit = 10
+	}
+	links, err := h.links.SearchPublic(c.Query("q"), c.Query("sort") == "popular", limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return

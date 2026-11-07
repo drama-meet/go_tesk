@@ -3,8 +3,9 @@ package model
 import "time"
 
 type User struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement",json:"id"`
-	Name      string    `gorm:"uniqueIndex;size:64;not null",json:"username"`
-	Password  string    `gorm:"size:255;not null",json:"password"`
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name      string    `gorm:"uniqueIndex;size:64;not null" json:"username"`
+	Password  string    `gorm:"size:255;not null" json:"-"`
+	Email     string    `gorm:"size:111;not null" json:"email"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
 }
